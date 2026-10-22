@@ -23,9 +23,13 @@ export const outboxEvents = pgTable(
     payloadJson: jsonb("payload_json").notNull(),
     status: text("status").notNull().default("pending"), // 'pending' | 'dispatched' | 'acknowledged' | 'retry_wait' | 'dead_letter'
     attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     availableAt: timestamp("available_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -35,6 +39,7 @@ export const outboxEvents = pgTable(
       table.status,
       table.availableAt,
     ),
+    index("idx_outbox_events_lease").on(table.status, table.leaseExpiresAt),
     index("idx_outbox_events_guild_id").on(table.guildId),
   ],
 );

@@ -126,3 +126,31 @@ export const giveaways = pgTable(
     index("idx_giveaways_guild_status").on(table.guildId, table.status),
   ],
 );
+
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    status: text("status").notNull().default("draft"),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    discordMessageId: text("discord_message_id"),
+    authorUserId: text("author_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_announcements_guild_status").on(table.guildId, table.status),
+    index("idx_announcements_guild_created").on(table.guildId, table.createdAt),
+  ],
+);
