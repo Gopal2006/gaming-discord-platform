@@ -4,12 +4,12 @@ import type {
   TenantContext,
 } from "@nexus/database";
 import {
-  evaluateAuthorization,
+  evaluateActionPolicy,
   type ActorContext,
   type PermissionGrant,
 } from "@nexus/authorization";
 import { GuildCapability, type GuildId } from "@nexus/contracts";
-import { UnauthorizedError } from "../errors.js";
+import { PolicyViolationError, UnauthorizedError } from "../errors.js";
 
 export interface UpdateGuildSettingsRequest {
   actor: ActorContext;
@@ -25,22 +25,42 @@ export async function updateGuildSettingsWorkflow(
 ): Promise<GuildSettingsRecord> {
   const { actor, grants, tenant, correlationId, patch } = request;
 
-  // 1. Authorize Capability
-  const decision = evaluateAuthorization(
-    {
-      actor,
-      capability: GuildCapability.GuildSettingsEdit,
-      targetRealm: "guild",
-      targetGuildId: tenant.guildId,
+  const existing = await uow
+    .getRepositories()
+    .guildSettings.getSettings(tenant);
+
+  // 1. Authorize Capability & Check Action Policy
+  const decision = evaluateActionPolicy({
+    actor,
+    targetGuildId: tenant.guildId,
+    capability: GuildCapability.GuildSettingsEdit,
+    operation: {
+      type: "settings.update",
+      riskLevel: "medium",
+      isDestructive: false,
     },
     grants,
-  );
+    guildState: {
+      isEmergencyStopped: existing?.isEmergencyStopped,
+      emergencyStopReason: existing?.emergencyStopReason,
+    },
+  });
 
   if (!decision.allowed) {
-    throw new UnauthorizedError(decision.reasonCode, {
-      capability: GuildCapability.GuildSettingsEdit,
-      guildId: tenant.guildId,
-    });
+    if (decision.reasonCode === "DENIED_UNAUTHORIZED") {
+      throw new UnauthorizedError(
+        (decision.details?.authReason as string) ?? "DENIED_UNAUTHORIZED",
+        {
+          capability: GuildCapability.GuildSettingsEdit,
+          guildId: tenant.guildId,
+        },
+      );
+    }
+    throw new PolicyViolationError(
+      decision.reasonCode,
+      decision.message ?? "Settings update denied by policy",
+      decision.details,
+    );
   }
 
   // 2. Execute Transactionally: Update settings and persist audit event
