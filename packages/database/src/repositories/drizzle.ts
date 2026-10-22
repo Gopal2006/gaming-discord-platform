@@ -51,6 +51,10 @@ export class DrizzleGuildSettingsRepository implements IGuildSettingsRepository 
       welcomeMessageTemplate: row.welcomeMessageTemplate,
       leaveChannelId: row.leaveChannelId,
       leaveMessageTemplate: row.leaveMessageTemplate,
+      isEmergencyStopped: row.isEmergencyStopped ?? false,
+      emergencyStoppedAt: row.emergencyStoppedAt,
+      emergencyStoppedByActorId: row.emergencyStoppedByActorId,
+      emergencyStopReason: row.emergencyStopReason,
       schemaVersion: row.schemaVersion,
       updatedAt: row.updatedAt,
     };
@@ -82,6 +86,10 @@ export class DrizzleGuildSettingsRepository implements IGuildSettingsRepository 
         welcomeMessageTemplate: row.welcomeMessageTemplate,
         leaveChannelId: row.leaveChannelId,
         leaveMessageTemplate: row.leaveMessageTemplate,
+        isEmergencyStopped: row.isEmergencyStopped ?? false,
+        emergencyStoppedAt: row.emergencyStoppedAt,
+        emergencyStoppedByActorId: row.emergencyStoppedByActorId,
+        emergencyStopReason: row.emergencyStopReason,
         schemaVersion: row.schemaVersion,
         updatedAt: row.updatedAt,
       };
@@ -105,6 +113,10 @@ export class DrizzleGuildSettingsRepository implements IGuildSettingsRepository 
       welcomeMessageTemplate: row.welcomeMessageTemplate,
       leaveChannelId: row.leaveChannelId,
       leaveMessageTemplate: row.leaveMessageTemplate,
+      isEmergencyStopped: row.isEmergencyStopped ?? false,
+      emergencyStoppedAt: row.emergencyStoppedAt,
+      emergencyStoppedByActorId: row.emergencyStoppedByActorId,
+      emergencyStopReason: row.emergencyStopReason,
       schemaVersion: row.schemaVersion,
       updatedAt: row.updatedAt,
     };
