@@ -13,6 +13,8 @@ export interface OutboxDispatcherOptions {
   leaseDurationMs?: number;
   maxAttempts?: number;
   baseBackoffMs?: number;
+  isEmergencyStopped?: () => Promise<boolean> | boolean;
+  isGuildEmergencyStopped?: (guildId: string) => Promise<boolean> | boolean;
 }
 
 export interface DispatchResult {
@@ -20,6 +22,7 @@ export interface DispatchResult {
   acknowledgedCount: number;
   failedCount: number;
   recoveredLeasesCount: number;
+  pausedByEmergencyStop?: boolean;
 }
 
 export class OutboxDispatcher {
@@ -28,6 +31,10 @@ export class OutboxDispatcher {
   private readonly leaseDurationMs: number;
   private readonly maxAttempts: number;
   private readonly baseBackoffMs: number;
+  private readonly isEmergencyStopped?: () => Promise<boolean> | boolean;
+  private readonly isGuildEmergencyStopped?: (
+    guildId: string,
+  ) => Promise<boolean> | boolean;
 
   constructor(
     private readonly outboxRepo: IOutboxRepository,
@@ -39,9 +46,25 @@ export class OutboxDispatcher {
     this.leaseDurationMs = options.leaseDurationMs ?? 30000;
     this.maxAttempts = options.maxAttempts ?? 5;
     this.baseBackoffMs = options.baseBackoffMs ?? 2000;
+    this.isEmergencyStopped = options.isEmergencyStopped;
+    this.isGuildEmergencyStopped = options.isGuildEmergencyStopped;
   }
 
   async dispatchPending(now: Date = new Date()): Promise<DispatchResult> {
+    // 1. Guard against global emergency stop
+    if (this.isEmergencyStopped) {
+      const isStopped = await this.isEmergencyStopped();
+      if (isStopped) {
+        return {
+          claimedCount: 0,
+          acknowledgedCount: 0,
+          failedCount: 0,
+          recoveredLeasesCount: 0,
+          pausedByEmergencyStop: true,
+        };
+      }
+    }
+
     const recovered = await this.outboxRepo.recoverExpiredLeases(now);
     const claimed = await this.outboxRepo.claimPending(
       this.workerId,
@@ -54,6 +77,20 @@ export class OutboxDispatcher {
     let failed = 0;
 
     for (const event of claimed) {
+      if (this.isGuildEmergencyStopped && event.guildId) {
+        const guildStopped = await this.isGuildEmergencyStopped(event.guildId);
+        if (guildStopped) {
+          await this.outboxRepo.markFailed(
+            event.id,
+            "Guild emergency stop active; event deferred",
+            true,
+            this.baseBackoffMs * 5,
+            now,
+          );
+          continue;
+        }
+      }
+
       try {
         await this.transport.publish(event);
         await this.outboxRepo.markAcknowledged(event.id, now);
