@@ -139,13 +139,42 @@ For business writes that trigger external effects (publish an announcement, send
 
 This avoids the dual-write gap where a database transaction commits but publishing a queue job fails. For simpler operations, use the same durability principles proportional to risk.
 
-## 7. Tenant model
+## 7. Action-Safety Policy Boundary
+
+The `ActionPolicyEngine` in `@nexus/authorization` forms the single, centralized, transport-independent enforcement gate for state mutations across all entry points:
+
+```text
+  [Web Dashboard / REST API]      [Discord Slash Commands]
+                 ↘                         ↙
+             [Central ActionPolicyEngine]
+              - Capability & grant checks
+              - Discord permission manifest check (Administrator or Granular)
+              - Role hierarchy & protected target check
+              - Global & per-guild emergency kill-switches
+              - Hard bulk safety ceilings (purge/batch limits)
+              - Single-use confirmation tokens for destructive actions
+              - Mass mention (@everyone / @here) suppression
+                         ↓
+             [Application Workflows & Outbox]
+                         ↓
+              [PostgreSQL Transaction & Event]
+                         ↓
+              [Transactional Outbox Workers]
+```
+
+### Inviolable Invariants:
+
+1. **Administrator Invariant:** The presence of the Discord `ADMINISTRATOR` permission (`0x8`) satisfies external Discord transport permission requirements, but **NEVER** bypasses internal Nexus authorization, role hierarchy, bulk limits, emergency stops, or confirmation requirements.
+2. **Fail-Closed Policy:** Any indeterminate evaluation state, missing actor grant, or emergency stop triggers an immediate rejection.
+3. **Transport Independence:** Future Discord command adapters (Milestone 4) and outbox workers MUST invoke the same `evaluateActionPolicy` / application workflows rather than implementing custom Discord permission checks.
+
+## 8. Tenant model
 
 The unit of configuration and isolation is the Discord guild. All tenant-owned records are linked to a `guild_id` or a tenant-scoped parent; tenant repository methods require a `TenantContext` rather than accepting naked IDs. Unique constraints, foreign keys and queries include tenant scope when relevant. Add PostgreSQL Row-Level Security only as defense in depth after connection/context handling is safely designed; never treat RLS as a substitute for application authorization and tests.
 
 Global shared resources (built-in game templates, default announcement templates) are explicitly global and read-only for tenants unless a tenant clones them. A clone receives its own IDs and version chain. Global operators access tenant data only via approved, audited support flows.
 
-## 8. Caching and consistency
+## 9. Caching and consistency
 
 - PostgreSQL is authoritative for configuration, authorization grants, registrations, matches, audit and workflow state.
 - Redis is disposable cache and queue infrastructure; correctness must survive eviction/restart.
@@ -154,7 +183,7 @@ Global shared resources (built-in game templates, default announcement templates
 - Queue delivery is generally at-least-once. Consumers must be idempotent; never assume exactly-once distributed execution.
 - Read-after-write UI behavior is defined for critical flows, especially registration, roster mutation and match result submission.
 
-## 9. Scaling path
+## 10. Scaling path
 
 **Pilot:** one API instance, one bot instance, one worker deployment with concurrency controls, managed PostgreSQL, managed Redis and object store.  
 **Growth:** independent API replicas; separate worker pools by queue class; bot sharding only when Discord guild-count/Gateway requirements and metrics justify it; read/query optimization, connection pooling and cache tuning.  
@@ -162,7 +191,7 @@ Global shared resources (built-in game templates, default announcement templates
 
 Never introduce sharding or microservices as marketing checkboxes. Track guild count, event rate, queue wait time, Discord API errors, database pool saturation, latency and memory before scaling.
 
-## 10. Architectural quality gates
+## 11. Architectural quality gates
 
 - No domain policy is implemented only in React or only inside a Discord command.
 - No cross-tenant query can execute without tenant context.
