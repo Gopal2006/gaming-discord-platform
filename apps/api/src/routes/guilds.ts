@@ -7,17 +7,28 @@ import {
   createAnnouncementWorkflow,
   submitRegistrationWorkflow,
   transitionTicketWorkflow,
+  manageEmergencyStopWorkflow,
+  executeModerationWorkflow,
+  type IConfirmationService,
+  InMemoryConfirmationService,
+  type ModerationActionType,
 } from "@nexus/application";
+import type { ConfirmationTokenPayload } from "@nexus/contracts";
 
 export interface GuildRoutesOptions {
   uow: IUnitOfWork;
   sessionStore: ISessionStore;
+  confirmationService?: IConfirmationService;
 }
 
 export function createGuildRoutes(
   options: GuildRoutesOptions,
 ): FastifyPluginAsync {
-  const { uow, sessionStore } = options;
+  const {
+    uow,
+    sessionStore,
+    confirmationService = new InMemoryConfirmationService(),
+  } = options;
   const { authenticate, requireGuildTenant } = createAuthHooks(sessionStore);
 
   return async (app) => {
@@ -175,6 +186,117 @@ export function createGuildRoutes(
         });
 
         return { ticket };
+      },
+    );
+
+    // 7. Request Confirmation Token for Destructive Action
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        operationType: string;
+        targetFingerprint: string;
+        ttlSeconds?: number;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/confirmations",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request, reply) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const { operationType, targetFingerprint, ttlSeconds } = request.body;
+
+        const tokenResult = confirmationService.createToken({
+          guildId: tenant.guildId,
+          actorId: actor.actorId,
+          operationType,
+          targetFingerprint,
+          ttlSeconds,
+        });
+
+        reply.status(201);
+        return tokenResult;
+      },
+    );
+
+    // 8. Emergency Stop Trigger / Lift
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        action: "stop" | "lift";
+        reason?: string;
+        confirmationToken?: ConfirmationTokenPayload;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/emergency-stop",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+        const { action, reason, confirmationToken } = request.body;
+
+        const settings = await manageEmergencyStopWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          action,
+          reason,
+          confirmationToken,
+        });
+
+        return { settings };
+      },
+    );
+
+    // 9. Execute Moderation Action (Ban, Kick, Timeout, Purge)
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        action: ModerationActionType;
+        targetId: string;
+        reason: string;
+        isGuildOwner?: boolean;
+        isBotSelf?: boolean;
+        targetRolePosition?: number;
+        bulkCount?: number;
+        durationSeconds?: number;
+        botPermissions?: {
+          rawBitfield?: string;
+          botRolePosition?: number;
+        };
+        confirmationToken?: ConfirmationTokenPayload;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/moderation",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request, reply) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+        const body = request.body;
+
+        const result = await executeModerationWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          action: body.action,
+          target: {
+            targetId: body.targetId,
+            isGuildOwner: body.isGuildOwner,
+            isBotSelf: body.isBotSelf,
+            targetRolePosition: body.targetRolePosition,
+          },
+          reason: body.reason,
+          bulkCount: body.bulkCount,
+          durationSeconds: body.durationSeconds,
+          botPermissions: body.botPermissions,
+          confirmationToken: body.confirmationToken,
+        });
+
+        reply.status(200);
+        return { result };
       },
     );
   };
