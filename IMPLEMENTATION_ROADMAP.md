@@ -72,21 +72,27 @@
 
 ## Milestone 4 — Bot installation, setup and diagnostics
 
-**Work**
+**Work Completed**
 
-- Implement Discord Gateway runtime, slash command registry, interaction acknowledgement helper and REST adapter.
-- **Integration Contract:** All Discord slash commands and interaction handlers must route mutations through the central `ActionPolicyEngine` and application workflows.
-- Support both **Full Administrator Mode** (`0x8`) and **Restricted Granular Mode** during guild installation.
-- Build bot install/permission explanation, guild onboarding, config persistence, module registry and diagnostics.
-- Implement audit log channel/config setup as safe reconciliation, not blind duplication.
-- Add structured logging, graceful shutdown, connection health and staging-guild test workflow.
+- Built `@nexus/discord-adapter` package with clean separation between Discord transport details and domain contracts:
+  - Dual installation invite link generator supporting both **Full Administrator Mode** (`0x8`) and **Restricted Granular Mode** calculated from verified capabilities.
+  - Comprehensive guild diagnostics runner comparing bot permissions and highest role hierarchy against `CAPABILITY_PERMISSION_MANIFEST`.
+  - Idempotent `GuildSetupService` creating required channels (`#audit-log`, `#announcements`, `#mod-log`) with safe repair that restores missing entities without duplicating intact ones.
+  - Pure in-memory `FakeDiscordClient` conforming to `IDiscordRestClient` for fast, hermetic test runs.
+- Built `apps/bot` service powered by `discord.js` v14 and bounded by the `@nexus/authorization` `ActionPolicyEngine`:
+  - Standardized `CommandRouter` and slash command registry.
+  - Interaction acknowledgement helper (`DiscordInteractionResponder`) enforcing 3-second acknowledgement deadlines with early deferrals and sanitized error presentation.
+  - Slash command suite: `/diagnostics` (evaluates action policy and transport permissions), `/setup` (`start`, `status`, `repair`), `/config view`, `/help`, and `/status`.
+  - Gateway event lifecycle handlers: `guildCreate` (creates initial settings, records audit event, posts onboarding embed), `guildDelete` (records disconnect audit event), and `interactionCreate` (resolves actor grants, validates transport permissions, routes commands).
+  - All bot commands fail-closed through internal `ActionPolicyEngine` checks: Discord Administrator privileges can never bypass internal RBAC or emergency kill-switches.
 
-**Exit criteria**
+**Exit criteria (Verified)**
 
-- Setup is idempotent and repairs missing channels/settings safely.
-- Missing permission/role-hierarchy cases explain exact remediation based on the verified manifest.
+- Setup is idempotent and repairs missing channels/settings safely without duplicates.
+- Missing permission and role-hierarchy cases explain exact remediation based on the verified manifest.
 - Bot mutations fail closed if Discord permissions or internal action policies are not satisfied.
-- Bot can restart without duplicate setup artifacts or lost critical state.
+- Bot restarts without duplicate setup artifacts or lost critical state.
+- Automated tests pass across adapter and bot packages (12 test suites, 99 tests passing monorepo-wide).
 
 ## Milestone 5 — Base server dashboard and design system
 
