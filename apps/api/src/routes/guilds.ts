@@ -6,9 +6,17 @@ import {
   updateGuildSettingsWorkflow,
   createAnnouncementWorkflow,
   submitRegistrationWorkflow,
+  openTicketWorkflow,
   transitionTicketWorkflow,
   manageEmergencyStopWorkflow,
   executeModerationWorkflow,
+  createPollWorkflow,
+  votePollWorkflow,
+  closePollWorkflow,
+  createGiveawayWorkflow,
+  enterGiveawayWorkflow,
+  endGiveawayWorkflow,
+  rerollGiveawayWorkflow,
   type IConfirmationService,
   InMemoryConfirmationService,
   type ModerationActionType,
@@ -297,6 +305,279 @@ export function createGuildRoutes(
 
         reply.status(200);
         return { result };
+      },
+    );
+
+    // 10. List Moderation Cases
+    app.get<{
+      Params: { guildId: string };
+      Querystring: { targetUserId?: string; limit?: number };
+    }>(
+      "/api/v1/guilds/:guildId/moderation/cases",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const { targetUserId, limit } = request.query;
+        const repos = uow.getRepositories();
+        const cases = targetUserId
+          ? await repos.moderationCases.listByTarget(tenant, targetUserId)
+          : await repos.moderationCases.list(tenant, limit);
+        return { cases };
+      },
+    );
+
+    // 11. List Tickets
+    app.get<{
+      Params: { guildId: string };
+    }>(
+      "/api/v1/guilds/:guildId/tickets",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const tickets = await uow.getRepositories().tickets.list(tenant);
+        return { tickets };
+      },
+    );
+
+    // 12. Open Ticket
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        category?: string;
+        channelId?: string;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/tickets",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request, reply) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const ticket = await openTicketWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          category: request.body.category,
+          channelId: request.body.channelId,
+        });
+
+        reply.status(201);
+        return { ticket };
+      },
+    );
+
+    // 13. List Polls
+    app.get<{
+      Params: { guildId: string };
+    }>(
+      "/api/v1/guilds/:guildId/polls",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const polls = await uow.getRepositories().polls.list(tenant);
+        return { polls };
+      },
+    );
+
+    // 14. Create Poll
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        question: string;
+        options: string[];
+        channelId: string;
+        durationMinutes?: number;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/polls",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request, reply) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const poll = await createPollWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          question: request.body.question,
+          options: request.body.options,
+          channelId: request.body.channelId,
+          durationMinutes: request.body.durationMinutes ?? 1440,
+        });
+
+        reply.status(201);
+        return { poll };
+      },
+    );
+
+    // 15. Vote on Poll
+    app.post<{
+      Params: { guildId: string; pollId: string };
+      Body: {
+        optionIndex: number;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/polls/:pollId/vote",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const result = await votePollWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          pollId: request.params.pollId,
+          optionIndex: request.body.optionIndex,
+        });
+
+        return result;
+      },
+    );
+
+    // 16. Close Poll
+    app.post<{
+      Params: { guildId: string; pollId: string };
+    }>(
+      "/api/v1/guilds/:guildId/polls/:pollId/close",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const result = await closePollWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          pollId: request.params.pollId,
+        });
+
+        return result;
+      },
+    );
+
+    // 17. List Giveaways
+    app.get<{
+      Params: { guildId: string };
+      Querystring: { status?: "active" | "ended" | "cancelled" };
+    }>(
+      "/api/v1/guilds/:guildId/giveaways",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const giveaways = await uow
+          .getRepositories()
+          .giveaways.list(tenant, request.query.status);
+        return { giveaways };
+      },
+    );
+
+    // 18. Create Giveaway
+    app.post<{
+      Params: { guildId: string };
+      Body: {
+        prize: string;
+        channelId: string;
+        winnerCount?: number;
+        durationMinutes?: number;
+      };
+    }>(
+      "/api/v1/guilds/:guildId/giveaways",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request, reply) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const giveaway = await createGiveawayWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          prize: request.body.prize,
+          winnerCount: request.body.winnerCount,
+          durationMinutes: request.body.durationMinutes ?? 1440,
+          channelId: request.body.channelId,
+        });
+
+        reply.status(201);
+        return { giveaway };
+      },
+    );
+
+    // 19. Enter Giveaway
+    app.post<{
+      Params: { guildId: string; giveawayId: string };
+    }>(
+      "/api/v1/guilds/:guildId/giveaways/:giveawayId/enter",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const result = await enterGiveawayWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          giveawayId: request.params.giveawayId,
+        });
+
+        return result;
+      },
+    );
+
+    // 20. End Giveaway
+    app.post<{
+      Params: { guildId: string; giveawayId: string };
+    }>(
+      "/api/v1/guilds/:guildId/giveaways/:giveawayId/end",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const result = await endGiveawayWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          giveawayId: request.params.giveawayId,
+        });
+
+        return result;
+      },
+    );
+
+    // 21. Reroll Giveaway
+    app.post<{
+      Params: { guildId: string; giveawayId: string };
+    }>(
+      "/api/v1/guilds/:guildId/giveaways/:giveawayId/reroll",
+      { preHandler: [authenticate, requireGuildTenant] },
+      async (request) => {
+        const tenant = request.tenant!;
+        const actor = request.actor!;
+        const grants = request.grants ?? [];
+
+        const result = await rerollGiveawayWorkflow(uow, {
+          actor,
+          grants,
+          tenant,
+          correlationId: request.id,
+          giveawayId: request.params.giveawayId,
+        });
+
+        return result;
       },
     );
   };

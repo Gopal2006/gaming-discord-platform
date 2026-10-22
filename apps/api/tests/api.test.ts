@@ -320,4 +320,103 @@ describe("Nexus API - Workflow Endpoints", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().ticket.status).toBe("in_progress");
   });
+
+  it("POST /api/v1/guilds/:guildId/tickets opens a new ticket", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/tickets`,
+      cookies: { nexus_session: token },
+      payload: {
+        category: "billing",
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.ticket.category).toBe("billing");
+    expect(body.ticket.status).toBe("open");
+
+    // List tickets
+    const listRes = await app.inject({
+      method: "GET",
+      url: `/api/v1/guilds/${guildId}/tickets`,
+      cookies: { nexus_session: token },
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.json().tickets.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("POST /api/v1/guilds/:guildId/polls handles creation, voting, and closing", async () => {
+    // 1. Create Poll
+    const createRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/polls`,
+      cookies: { nexus_session: token },
+      payload: {
+        question: "Best Game?",
+        options: ["Apex", "Valorant", "Overwatch"],
+        channelId: "chan_polls",
+      },
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const pollId = createRes.json().poll.id;
+
+    // 2. Vote
+    const voteRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/polls/${pollId}/vote`,
+      cookies: { nexus_session: token },
+      payload: {
+        optionIndex: 0,
+      },
+    });
+    expect(voteRes.statusCode).toBe(200);
+    expect(voteRes.json().success).toBe(true);
+
+    // 3. Close Poll
+    const closeRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/polls/${pollId}/close`,
+      cookies: { nexus_session: token },
+    });
+    expect(closeRes.statusCode).toBe(200);
+    expect(closeRes.json().poll.status).toBe("closed");
+  });
+
+  it("POST /api/v1/guilds/:guildId/giveaways handles lifecycle", async () => {
+    // 1. Create Giveaway
+    const createRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/giveaways`,
+      cookies: { nexus_session: token },
+      payload: {
+        prize: "Battle Pass",
+        channelId: "chan_giveaways",
+        winnerCount: 1,
+      },
+    });
+
+    expect(createRes.statusCode).toBe(201);
+    const giveawayId = createRes.json().giveaway.id;
+
+    // 2. Enter Giveaway
+    const enterRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/giveaways/${giveawayId}/enter`,
+      cookies: { nexus_session: token },
+    });
+    expect(enterRes.statusCode).toBe(200);
+    expect(enterRes.json().success).toBe(true);
+
+    // 3. End Giveaway
+    const endRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/guilds/${guildId}/giveaways/${giveawayId}/end`,
+      cookies: { nexus_session: token },
+    });
+    expect(endRes.statusCode).toBe(200);
+    expect(endRes.json().giveaway.status).toBe("ended");
+    expect(endRes.json().winners).toEqual(["usr_owner"]);
+  });
 });
