@@ -25,5 +25,11 @@
     "turbo": "^2.4.4",
     "typescript": "^5.7.3",
     "vitest": "^3.0.7"
+  },
+  "dependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
