@@ -4,13 +4,13 @@ import type {
   TenantContext,
 } from "@nexus/database";
 import {
-  evaluateAuthorization,
+  evaluateActionPolicy,
   type ActorContext,
   type PermissionGrant,
 } from "@nexus/authorization";
 import { GuildCapability } from "@nexus/contracts";
 import { sanitizeMentions } from "@nexus/domain";
-import { UnauthorizedError } from "../errors.js";
+import { PolicyViolationError, UnauthorizedError } from "../errors.js";
 
 export interface CreateAnnouncementRequest {
   actor: ActorContext;
@@ -34,22 +34,47 @@ export async function createAnnouncementWorkflow(
 ): Promise<AnnouncementRecord> {
   const { actor, grants, tenant, correlationId, data } = request;
 
-  // 1. Authorize Capability
-  const decision = evaluateAuthorization(
-    {
-      actor,
-      capability: GuildCapability.AnnouncementCreate,
-      targetRealm: "guild",
-      targetGuildId: tenant.guildId,
+  const existingSettings = await uow
+    .getRepositories()
+    .guildSettings.getSettings(tenant);
+
+  // 1. Authorize Capability & Check Action Policy
+  const decision = evaluateActionPolicy({
+    actor,
+    targetGuildId: tenant.guildId,
+    capability: GuildCapability.AnnouncementCreate,
+    operation: {
+      type: "announcement.create",
+      riskLevel: data.allowEveryone || data.allowHere ? "medium" : "low",
+      isDestructive: false,
+      mentions: {
+        everyone: data.allowEveryone ?? false,
+        here: data.allowHere ?? false,
+        roles: [],
+      },
     },
     grants,
-  );
+    guildState: {
+      isEmergencyStopped: existingSettings?.isEmergencyStopped,
+      emergencyStopReason: existingSettings?.emergencyStopReason,
+    },
+  });
 
   if (!decision.allowed) {
-    throw new UnauthorizedError(decision.reasonCode, {
-      capability: GuildCapability.AnnouncementCreate,
-      guildId: tenant.guildId,
-    });
+    if (decision.reasonCode === "DENIED_UNAUTHORIZED") {
+      throw new UnauthorizedError(
+        (decision.details?.authReason as string) ?? "DENIED_UNAUTHORIZED",
+        {
+          capability: GuildCapability.AnnouncementCreate,
+          guildId: tenant.guildId,
+        },
+      );
+    }
+    throw new PolicyViolationError(
+      decision.reasonCode,
+      decision.message ?? "Announcement creation denied by policy",
+      decision.details,
+    );
   }
 
   // 2. Apply Domain Invariant: Sanitize Mentions
@@ -59,9 +84,9 @@ export async function createAnnouncementWorkflow(
     allowRoles: true,
   });
 
-  // 3. Execute Transactionally: Write Announcement & Outbox Event
+  // 3. Persist Transactionally
   return await uow.runInTransaction(async (repos) => {
-    const created = await repos.announcements.create(tenant, {
+    const announcement = await repos.announcements.create(tenant, {
       id: data.id,
       channelId: data.channelId,
       title: data.title,
@@ -73,24 +98,24 @@ export async function createAnnouncementWorkflow(
       authorUserId: actor.actorId,
     });
 
+    // Write Outbox Event
     await repos.outbox.writeEvent({
-      id: `evt_ann_${created.id}_${Date.now()}`,
+      id: `evt_ann_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       guildId: tenant.guildId,
       eventType: "announcement.created",
       eventVersion: 1,
       aggregateType: "announcement",
-      aggregateId: created.id,
+      aggregateId: announcement.id,
       payloadJson: {
-        announcementId: created.id,
-        channelId: created.channelId,
-        title: created.title,
-        scheduledFor: created.scheduledFor?.toISOString() ?? null,
-        authorId: actor.actorId,
+        announcementId: announcement.id,
+        channelId: announcement.channelId,
+        title: announcement.title,
+        status: announcement.status,
         correlationId,
       },
       availableAt: new Date(),
     });
 
-    return created;
+    return announcement;
   });
 }
