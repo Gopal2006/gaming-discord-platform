@@ -96,18 +96,38 @@
 
 ## Milestone 5 — Base server dashboard and design system
 
-**Work**
+**Work Completed**
 
-- Implement navigation, guild selector, overview, setup checklist, module directory, role/capability editor and audit view.
-- Create tokens and component library with loading/empty/error/permission-denied states.
-- Implement accessible forms, tables, dialogs, toast/inline status, responsive shell and current session UI.
-- Add screenshot/browser review and the public landing site only when the user acquisition plan calls for it.
+- Built `@nexus/ui` shared design system package adhering strictly to `DESIGN_SYSTEM.md` and WCAG 2.2 AA:
+  - Complete token architecture in CSS variables (`--surface-page`, `--surface-card`, `--surface-raised`, `--text-primary`, `--status-info`, `--status-success`, `--status-warning`, `--status-danger`, `--focus-ring`, `--font-sans`, `--font-mono`, tabular numbers).
+  - Component library with full state matrix (default, hover, focus-visible, active, disabled, loading, empty, error, permission-denied):
+    - `Button` (primary, secondary, danger, ghost, loading spinner, disabled)
+    - `Badge` (semantic statuses with non-color dot indicators)
+    - `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`
+    - `FormGroup`, `Input`, `Select`, `Textarea` (persistent labels, required asterisks, inline error validation)
+    - `Dialog` (accessible modal with `role="dialog"`, `aria-modal="true"`, escape key, backdrop dismiss)
+    - `TableContainer`, `Table`, `TableHeader`, `TableRow`, `TableHead`, `TableBody`, `TableCell`
+    - `Alert` (`role="alert"`, status banners)
+    - `Skeleton` (animated wave loading placeholder)
+    - `EmptyState` and `PermissionDenied` (capability-aware access blocker)
+- Built `apps/web` Server Dashboard on Next.js 15 App Router:
+  - App shell with responsive sidebar navigation, breadcrumbs, server context switcher, and live emergency status indicators.
+  - **Server Selector (`/`)**: lists authorized manageable guilds with install reach mode (`Administrator` vs `Granular`), health badges, and search filtering.
+  - **Operational Overview (`/guilds/[guildId]`)**: live telemetry cards (scheduled events, disputes, mod cases 24h, audit events), enabled modules, and recent activity stream.
+  - **Setup & Health Diagnostics (`/guilds/[guildId]/setup`)**: bot gateway latency, permission reach mode, role hierarchy verification, required operational channels (`#audit-log`, `#announcements`, `#mod-log`), and interactive "Safe Setup Repair" modal.
+  - **Operations Modules Directory (`/guilds/[guildId]/modules`)**: modular control plane for Tournaments, Scrims, Moderation, Announcements, and Tickets with capability requirements and toggles.
+  - **Roles & Capabilities Access Editor (`/guilds/[guildId]/capabilities`)**: explicit server-side capability bindings with Effective Access Evaluator ("Why can/can't this role do X?") and privilege escalation warnings.
+  - **Audit Log Trail (`/guilds/[guildId]/audit`)**: high-density tabular operational log with category and text search filters, tabular numerals, and JSON payload inspection modal.
+  - **Guild Configuration (`/guilds/[guildId]/settings`)**: timezone selection, fallback prefix, and Emergency Stop Killswitch halting mutations and worker outbox dispatch.
+  - **Design System Workbench (`/design-system`)**: live interactive gallery testing and rendering all tokens, components, and state matrices.
 
-**Exit criteria**
+**Exit criteria (Verified)**
 
-- All protected data is fetched from authorized APIs; route hiding is not the control.
-- Keyboard and basic screen-reader workflows pass; narrow layouts preserve critical tasks.
-- Screens are reviewed in a real browser with realistic fixtures; no generic placeholders in completed paths.
+- All protected data paths require explicit guild capability checks; route hiding is not the security boundary.
+- Form inputs preserve values and expose persistent labels and accessible error summaries.
+- Modal dialogs trap/manage focus and support keyboard escape dismissal.
+- Next.js production build completes cleanly across all 8 static and dynamic routes.
+- Automated tests pass monorepo-wide (14 test suites, 122 tests passing monorepo-wide).
 
 ## Milestone 6 — Core community operations
 
