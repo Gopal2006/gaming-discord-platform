@@ -1,0 +1,33 @@
+{
+  "name": "@nexus/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "lint": "tsc -b --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@nexus/application": "workspace:*",
+    "@nexus/authorization": "workspace:*",
+    "@nexus/config": "workspace:*",
+    "@nexus/contracts": "workspace:*",
+    "@nexus/database": "workspace:*",
+    "@nexus/discord-adapter": "workspace:*",
+    "@nexus/domain": "workspace:*",
+    "@nexus/observability": "workspace:*",
+    "discord.js": "^14.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  }
+}
