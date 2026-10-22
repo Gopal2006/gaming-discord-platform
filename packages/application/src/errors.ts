@@ -21,6 +21,19 @@ export class UnauthorizedError extends ApplicationError {
   }
 }
 
+export class PolicyViolationError extends ApplicationError {
+  public readonly reasonCode: string;
+
+  constructor(
+    reasonCode: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message, reasonCode, details);
+    this.reasonCode = reasonCode;
+  }
+}
+
 export class ResourceNotFoundError extends ApplicationError {
   constructor(resourceType: string, id: string) {
     super(`${resourceType} with ID '${id}' not found`, "RESOURCE_NOT_FOUND", {
