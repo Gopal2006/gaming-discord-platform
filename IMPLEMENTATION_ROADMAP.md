@@ -1,0 +1,207 @@
+# End-to-End Implementation Roadmap
+
+**Rule:** milestones advance by acceptance evidence, not elapsed time or percentage of code written. This roadmap is intentionally staged; the entire vision is broader than the first production release.
+
+## Milestone 0 — Product decisions and source reconciliation
+
+**Work**
+
+- Confirm final working name/domain approach.
+- Obtain the legacy bot source repository and reconcile `dc_bot_rough(1).txt` against actual code; tag each behavior keep/rebuild/drop/defer.
+- Approve P0/P1 boundaries, data retention, moderation principles, permissions, initial hosting regions and beta success metrics.
+- Create ADR process and issue templates.
+
+**Exit criteria**
+
+- Every P0 feature has an owner, user outcome, security classification, acceptance criteria and dependency.
+- Legacy features are not labeled verified until inspected/tested.
+- Open decision log has explicit owner and deadline; unresolved policy choices block affected features.
+
+## Milestone 1 — Repository and engineering foundation
+
+**Work**
+
+- Create GitHub repository and protect the default branch.
+- Set up pnpm/Turborepo, TypeScript strict mode, lint/format, test runner, environment validation and CI.
+- Establish apps/packages according to actual initial use; add `AGENTS.md`, tailored `.agents/skills`, docs and ADR template.
+- Configure secret scanning, dependency audit, lockfile and branch checks.
+
+**Exit criteria**
+
+- Fresh clone can install/build/test from documented instructions.
+- PR CI required checks fail on type/test/lint/security failure.
+- No token or production environment value is committed.
+
+## Milestone 2 — Domain contracts and persistence
+
+**Work**
+
+- Define canonical IDs, UTC clock strategy, request/event DTOs and error envelope.
+- Implement PostgreSQL schema for identity, guild config, capability grants, audit, templates, scheduled actions/outbox and job execution.
+- Add migrations, repositories, tenant context and transaction helpers.
+- Implement deterministic domain services without Discord/API coupling.
+
+**Exit criteria**
+
+- Migrations create a clean database and upgrade from previous test schema.
+- Transaction and tenant-scope integration tests pass.
+- Outbox/job recovery logic is tested for publish interruption and replay.
+
+## Milestone 3 — Authentication, tenant isolation and authorization
+
+**Work**
+
+- Implement Discord OAuth2 flow and secure server-side session lifecycle.
+- Build server picker from authorized/manageable guilds and verified install state.
+- Implement platform realm and guild realm as separate capability namespaces.
+- Add grant/revoke/effective-access evaluation, audit, session revocation and cache invalidation.
+- Implement API schema validation/response serialization, CSRF/CORS/headers/rate limits.
+
+**Exit criteria**
+
+- Cross-tenant negative tests pass for all existing endpoints/repositories.
+- A normal guild admin cannot access platform routes.
+- Permission revocation takes effect within defined freshness bound.
+- No sensitive tokens reach browser storage/logs.
+
+## Milestone 4 — Bot installation, setup and diagnostics
+
+**Work**
+
+- Implement Discord Gateway runtime, slash command registry, interaction acknowledgement helper and REST adapter.
+- Build bot install/permission explanation, guild onboarding, config persistence, module registry and diagnostics.
+- Implement audit log channel/config setup as safe reconciliation, not blind duplication.
+- Add structured logging, graceful shutdown, connection health and staging-guild test workflow.
+
+**Exit criteria**
+
+- Setup is idempotent and repairs missing channels/settings safely.
+- Missing permission/role-hierarchy cases explain exact remediation.
+- Bot can restart without duplicate setup artifacts or lost critical state.
+
+## Milestone 5 — Base server dashboard and design system
+
+**Work**
+
+- Implement navigation, guild selector, overview, setup checklist, module directory, role/capability editor and audit view.
+- Create tokens and component library with loading/empty/error/permission-denied states.
+- Implement accessible forms, tables, dialogs, toast/inline status, responsive shell and current session UI.
+- Add screenshot/browser review and the public landing site only when the user acquisition plan calls for it.
+
+**Exit criteria**
+
+- All protected data is fetched from authorized APIs; route hiding is not the control.
+- Keyboard and basic screen-reader workflows pass; narrow layouts preserve critical tasks.
+- Screens are reviewed in a real browser with realistic fixtures; no generic placeholders in completed paths.
+
+## Milestone 6 — Core community operations
+
+**Work**
+
+- Moderation cases/actions, warning history, timeouts, safe purge, slowmode/lock/unlock.
+- Welcome/leave, announcement template authoring/preview/publish/schedule, role self-service if approved.
+- Tickets with archived closure/transcript retention, polls, giveaways and opt-in notifications.
+- Capability checks, audit events and error/partial-success UX for each action.
+
+**Exit criteria**
+
+- Every command/API action has permission-denial tests, audit behavior and rate-limit handling.
+- Scheduled actions survive restart and cannot execute twice due to retry.
+- Destructive actions preview scope and follow data-retention rules.
+
+## Milestone 7 — Game profiles and registration
+
+**Work**
+
+- Implement built-in starter game profile definitions plus tenant-owned clone/custom profiles.
+- Implement versioned dynamic forms, field validation/visibility, solo/team entries, capacities, waitlist and deadlines.
+- Implement player/team profile, invitations, roster changes, registration review and check-in.
+- Build CSV export jobs with permission-controlled private storage.
+
+**Exit criteria**
+
+- New custom game profile can be created without code changes.
+- Concurrent submissions cannot oversubscribe a registration cap or create duplicate active entries.
+- Old submissions retain the form version and remain interpretable after schema edit.
+
+## Milestone 8 — Tournament and match lifecycle
+
+**Work**
+
+- Competition/stage rules, start with single-elimination and round robin.
+- Bracket/schedule generation, seeding, referee assignment, match reminders, score submission, evidence, disputes and final results.
+- Tournament-specific announcements and standings.
+- Build property/fixture tests for byes, ties, forfeits, cancellations, reschedule, corrected results and downstream progression.
+
+**Exit criteria**
+
+- Incompatible formats are rejected before publish.
+- A match result cannot be approved by an unauthorized actor or silently overwritten.
+- Bracket progression is transactionally safe or recoverable, versioned and auditable.
+
+## Milestone 9 — Security depth and operational controls
+
+**Work**
+
+- Anti-spam/anti-raid rules with configurable thresholds, allowlists, quarantine/review and incident workflows.
+- Platform feature flags, support case/access grant, incident console, job monitoring and audit search.
+- Runbooks, alerts, restore drill, key rotation and tenant disconnect/deletion/retention jobs.
+
+**Exit criteria**
+
+- Incident actions are bounded, reversible when possible and produce an action timeline.
+- Support access expires and is auditable.
+- Backup restore and queue reconciliation have been exercised.
+
+## Milestone 10 — Beta pilot and reliability hardening
+
+**Work**
+
+- Invite selected test guilds; provide support channel and feedback capture.
+- Measure onboarding, command success, registration completion, schedule failure, latency, error rate and job backlog.
+- Fix critical workflow, permissions, performance, accessibility and mobile issues.
+- Verify policy, product claims and documentation against actual deployed features.
+
+**Exit criteria**
+
+- All P0 acceptance criteria pass on staging and pilot evidence is reviewed.
+- Security owner and product owner sign off public beta risk register.
+- SLO, alert thresholds and support escalation are defined from observed traffic.
+
+## Milestone 11 — Public beta / general availability
+
+**Work**
+
+- Public product docs, privacy/terms, support escalation, status page as appropriate, onboarding and release notes.
+- Protect feature rollout; monitor incidents and rollback options.
+- Establish data-retention request handling, operator-access reviews and dependency update cadence.
+
+**Exit criteria**
+
+- No blocker-level defect; critical/high security findings resolved or accepted in writing with expiry.
+- Operational and security runbooks are owned and current.
+- Product marketing makes no promises beyond shipped and verified capabilities.
+
+## Milestone 12 — Scale and commercial readiness
+
+Only after real usage justifies it: bot sharding, worker pool separation, read-replica/query tuning, subscription/entitlement model, localization breadth, external game API integrations and advanced analytics. Each expansion has its own ADR, threat review, budget and support plan.
+
+## Work item template
+
+Every implementation task includes:
+
+- Outcome and user story.
+- Dependencies and related requirements section.
+- Domain/data/API/UI/Discord changes.
+- Permission capability and tenant scope.
+- State transitions and failure paths.
+- Migration/backfill/retention impact.
+- Test cases and security negative cases.
+- Logging/metrics/alert impact.
+- Acceptance criteria demonstrable in staging.
+- Documentation/runbook updates.
+- Rollback or forward-fix plan.
+
+## Definition of Done
+
+A task is done only when the implementation meets the contract; authorization and validation live server-side; relevant unit/integration/e2e tests pass; UI states/accessibility are reviewed where applicable; durable side effects are idempotent; logs/metrics are safe and useful; migration/deployment/recovery instructions exist; docs match implementation; and unresolved limitations are stated explicitly.
