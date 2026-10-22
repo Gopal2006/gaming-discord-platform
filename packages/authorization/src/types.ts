@@ -7,6 +7,7 @@ export interface ActorContext {
   readonly guildId?: string | null;
   readonly roleIds?: string[];
   readonly isGuildOwner?: boolean;
+  readonly actorRolePosition?: number;
 }
 
 export interface ResourceScope {
