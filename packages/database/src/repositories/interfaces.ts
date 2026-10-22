@@ -18,6 +18,10 @@ export interface GuildSettingsRecord {
   readonly welcomeMessageTemplate: string | null;
   readonly leaveChannelId: string | null;
   readonly leaveMessageTemplate: string | null;
+  readonly isEmergencyStopped: boolean;
+  readonly emergencyStoppedAt: Date | null;
+  readonly emergencyStoppedByActorId: string | null;
+  readonly emergencyStopReason: string | null;
   readonly schemaVersion: string;
   readonly updatedAt: Date;
 }
