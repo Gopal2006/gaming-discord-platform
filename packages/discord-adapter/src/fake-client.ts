@@ -96,4 +96,125 @@ export class FakeDiscordClient implements IDiscordRestClient {
     const key = `${guildId}_${userId}`;
     return this.members.get(key) ?? null;
   }
+
+  async timeoutMember(
+    guildId: string,
+    userId: string,
+    durationMs: number,
+    reason?: string,
+  ): Promise<void> {
+    const member = await this.getGuildMember(guildId, userId);
+    if (!member) {
+      this.addMember({
+        id: userId,
+        guildId,
+        username: `user_${userId}`,
+        roleIds: [],
+        highestRolePosition: 0,
+        isOwner: false,
+      });
+    }
+  }
+
+  async kickMember(
+    guildId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<void> {
+    const key = `${guildId}_${userId}`;
+    this.members.delete(key);
+  }
+
+  async banMember(
+    guildId: string,
+    userId: string,
+    options?: { deleteMessageSeconds?: number; reason?: string },
+  ): Promise<void> {
+    const key = `${guildId}_${userId}`;
+    this.members.delete(key);
+  }
+
+  async unbanMember(
+    guildId: string,
+    userId: string,
+    reason?: string,
+  ): Promise<void> {}
+
+  async bulkDelete(
+    channelId: string,
+    messageCount: number,
+  ): Promise<{ deletedCount: number }> {
+    const channel = this.channels.get(channelId);
+    if (!channel) {
+      throw new Error(`Channel ${channelId} not found`);
+    }
+    return { deletedCount: Math.min(messageCount, 100) };
+  }
+
+  async setChannelSlowmode(
+    channelId: string,
+    rateLimitPerUser: number,
+  ): Promise<void> {
+    const channel = this.channels.get(channelId);
+    if (!channel) {
+      throw new Error(`Channel ${channelId} not found`);
+    }
+  }
+
+  async lockChannel(
+    channelId: string,
+    options?: { reason?: string },
+  ): Promise<void> {
+    const channel = this.channels.get(channelId);
+    if (!channel) {
+      throw new Error(`Channel ${channelId} not found`);
+    }
+  }
+
+  async unlockChannel(
+    channelId: string,
+    options?: { reason?: string },
+  ): Promise<void> {
+    const channel = this.channels.get(channelId);
+    if (!channel) {
+      throw new Error(`Channel ${channelId} not found`);
+    }
+  }
+
+  async createTicketChannel(
+    guildId: string,
+    options: {
+      name: string;
+      topic?: string;
+      requesterId: string;
+    },
+  ): Promise<DiscordChannel> {
+    return await this.createChannel(guildId, {
+      name: options.name,
+      type: "text",
+      topic: options.topic ?? `Ticket for user ${options.requesterId}`,
+    });
+  }
+
+  async fetchChannelMessages(
+    channelId: string,
+    limit: number = 50,
+  ): Promise<
+    Array<{
+      id: string;
+      authorTag: string;
+      content: string;
+      timestamp: string;
+    }>
+  > {
+    return this.sentMessages
+      .filter((m) => m.channelId === channelId)
+      .slice(-limit)
+      .map((m) => ({
+        id: m.id,
+        authorTag: "User#0001",
+        content: m.content ?? "",
+        timestamp: new Date().toISOString(),
+      }));
+  }
 }

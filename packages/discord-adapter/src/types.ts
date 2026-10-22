@@ -83,4 +83,48 @@ export interface IDiscordRestClient {
     guildId: string,
     userId: string,
   ): Promise<DiscordMember | null>;
+
+  // Moderation & channel control
+  timeoutMember(
+    guildId: string,
+    userId: string,
+    durationMs: number,
+    reason?: string,
+  ): Promise<void>;
+  kickMember(guildId: string, userId: string, reason?: string): Promise<void>;
+  banMember(
+    guildId: string,
+    userId: string,
+    options?: { deleteMessageSeconds?: number; reason?: string },
+  ): Promise<void>;
+  unbanMember(guildId: string, userId: string, reason?: string): Promise<void>;
+  bulkDelete(
+    channelId: string,
+    messageCount: number,
+  ): Promise<{ deletedCount: number }>;
+  setChannelSlowmode(
+    channelId: string,
+    rateLimitPerUser: number,
+  ): Promise<void>;
+  lockChannel(channelId: string, options?: { reason?: string }): Promise<void>;
+  unlockChannel(
+    channelId: string,
+    options?: { reason?: string },
+  ): Promise<void>;
+
+  // Tickets
+  createTicketChannel(
+    guildId: string,
+    options: {
+      name: string;
+      topic?: string;
+      requesterId: string;
+    },
+  ): Promise<DiscordChannel>;
+  fetchChannelMessages(
+    channelId: string,
+    limit?: number,
+  ): Promise<
+    Array<{ id: string; authorTag: string; content: string; timestamp: string }>
+  >;
 }
