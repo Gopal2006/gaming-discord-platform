@@ -96,6 +96,10 @@ export const guildSettings = pgTable("guild_settings", {
   welcomeMessageTemplate: text("welcome_message_template"),
   leaveChannelId: text("leave_channel_id"),
   leaveMessageTemplate: text("leave_message_template"),
+  isEmergencyStopped: boolean("is_emergency_stopped").notNull().default(false),
+  emergencyStoppedAt: timestamp("emergency_stopped_at", { withTimezone: true }),
+  emergencyStoppedByActorId: text("emergency_stopped_by_actor_id"),
+  emergencyStopReason: text("emergency_stop_reason"),
   schemaVersion: text("schema_version").notNull().default("1.0"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
