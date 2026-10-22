@@ -53,6 +53,20 @@ export class InMemoryGuildSettingsRepository implements IGuildSettingsRepository
       leaveChannelId: patch.leaveChannelId ?? existing?.leaveChannelId ?? null,
       leaveMessageTemplate:
         patch.leaveMessageTemplate ?? existing?.leaveMessageTemplate ?? null,
+      isEmergencyStopped:
+        patch.isEmergencyStopped ?? existing?.isEmergencyStopped ?? false,
+      emergencyStoppedAt:
+        patch.emergencyStoppedAt !== undefined
+          ? patch.emergencyStoppedAt
+          : (existing?.emergencyStoppedAt ?? null),
+      emergencyStoppedByActorId:
+        patch.emergencyStoppedByActorId !== undefined
+          ? patch.emergencyStoppedByActorId
+          : (existing?.emergencyStoppedByActorId ?? null),
+      emergencyStopReason:
+        patch.emergencyStopReason !== undefined
+          ? patch.emergencyStopReason
+          : (existing?.emergencyStopReason ?? null),
       schemaVersion: patch.schemaVersion ?? existing?.schemaVersion ?? "1.0",
       updatedAt: new Date(),
     };
