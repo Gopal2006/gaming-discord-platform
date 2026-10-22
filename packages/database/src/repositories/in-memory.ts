@@ -12,6 +12,10 @@ import type {
   TicketRecord,
   IModerationCaseRepository,
   ModerationCaseRecord,
+  IPollRepository,
+  PollRecord,
+  IGiveawayRepository,
+  GiveawayRecord,
   IAuditEventRepository,
   IOutboxRepository,
   OutboxEventRecord,
@@ -254,6 +258,27 @@ export class InMemoryTicketRepository implements ITicketRepository {
     return record;
   }
 
+  async list(
+    tenant: TenantContext,
+    status?: TicketState,
+  ): Promise<readonly TicketRecord[]> {
+    return Array.from(this.store.values()).filter(
+      (r) => r.guildId === tenant.guildId && (!status || r.status === status),
+    );
+  }
+
+  async countOpenByRequester(
+    tenant: TenantContext,
+    requesterId: string,
+  ): Promise<number> {
+    return Array.from(this.store.values()).filter(
+      (r) =>
+        r.guildId === tenant.guildId &&
+        r.requesterId === requesterId &&
+        (r.status === "open" || r.status === "in_progress"),
+    ).length;
+  }
+
   async create(
     tenant: TenantContext,
     record: Omit<TicketRecord, "guildId" | "createdAt">,
@@ -286,6 +311,23 @@ export class InMemoryTicketRepository implements ITicketRepository {
     this.store.set(id, updated);
     return updated;
   }
+
+  async updateAssignee(
+    tenant: TenantContext,
+    id: string,
+    assignedUserId: string | null,
+  ): Promise<TicketRecord> {
+    const existing = await this.getById(tenant, id);
+    if (!existing) {
+      throw new Error(`Ticket ${id} not found in tenant ${tenant.guildId}`);
+    }
+    const updated: TicketRecord = {
+      ...existing,
+      assignedUserId,
+    };
+    this.store.set(id, updated);
+    return updated;
+  }
 }
 
 export class InMemoryModerationCaseRepository implements IModerationCaseRepository {
@@ -299,6 +341,27 @@ export class InMemoryModerationCaseRepository implements IModerationCaseReposito
     if (!record) return null;
     assertTenantBoundary(tenant, record.guildId);
     return record;
+  }
+
+  async list(
+    tenant: TenantContext,
+    limit: number = 50,
+  ): Promise<readonly ModerationCaseRecord[]> {
+    return Array.from(this.store.values())
+      .filter((r) => r.guildId === tenant.guildId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+  }
+
+  async listByTarget(
+    tenant: TenantContext,
+    targetUserId: string,
+  ): Promise<readonly ModerationCaseRecord[]> {
+    return Array.from(this.store.values())
+      .filter(
+        (r) => r.guildId === tenant.guildId && r.targetUserId === targetUserId,
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async create(
@@ -330,6 +393,178 @@ export class InMemoryModerationCaseRepository implements IModerationCaseReposito
       status,
     };
     this.store.set(id, updated);
+    return updated;
+  }
+}
+
+export class InMemoryPollRepository implements IPollRepository {
+  private readonly polls = new Map<string, PollRecord>();
+  private readonly votes = new Map<string, Map<string, number>>(); // pollId -> (userId -> optionIndex)
+
+  async getById(tenant: TenantContext, id: string): Promise<PollRecord | null> {
+    const poll = this.polls.get(id);
+    if (!poll) return null;
+    assertTenantBoundary(tenant, poll.guildId);
+    return poll;
+  }
+
+  async list(
+    tenant: TenantContext,
+    status?: "active" | "closed" | "archived",
+  ): Promise<readonly PollRecord[]> {
+    return Array.from(this.polls.values()).filter(
+      (p) => p.guildId === tenant.guildId && (!status || p.status === status),
+    );
+  }
+
+  async create(
+    tenant: TenantContext,
+    record: Omit<PollRecord, "guildId" | "createdAt">,
+  ): Promise<PollRecord> {
+    const created: PollRecord = {
+      ...record,
+      guildId: tenant.guildId,
+      createdAt: new Date(),
+    };
+    this.polls.set(created.id, created);
+    this.votes.set(created.id, new Map());
+    return created;
+  }
+
+  async recordVote(
+    tenant: TenantContext,
+    pollId: string,
+    userId: string,
+    optionIndex: number,
+  ): Promise<boolean> {
+    const poll = await this.getById(tenant, pollId);
+    if (!poll || poll.status !== "active") return false;
+    if (optionIndex < 0 || optionIndex >= poll.options.length) return false;
+
+    let pollVotes = this.votes.get(pollId);
+    if (!pollVotes) {
+      pollVotes = new Map();
+      this.votes.set(pollId, pollVotes);
+    }
+
+    if (pollVotes.has(userId)) return false; // Enforce single vote per user
+    pollVotes.set(userId, optionIndex);
+    return true;
+  }
+
+  async close(tenant: TenantContext, id: string): Promise<PollRecord> {
+    const poll = await this.getById(tenant, id);
+    if (!poll) {
+      throw new Error(`Poll ${id} not found in tenant ${tenant.guildId}`);
+    }
+    const updated: PollRecord = {
+      ...poll,
+      status: "closed",
+    };
+    this.polls.set(id, updated);
+    return updated;
+  }
+
+  async getVotes(
+    tenant: TenantContext,
+    pollId: string,
+  ): Promise<Record<number, number>> {
+    const poll = await this.getById(tenant, pollId);
+    if (!poll) return {};
+
+    const pollVotes = this.votes.get(pollId) ?? new Map();
+    const tally: Record<number, number> = {};
+    for (let i = 0; i < poll.options.length; i++) {
+      tally[i] = 0;
+    }
+    for (const opt of pollVotes.values()) {
+      tally[opt] = (tally[opt] ?? 0) + 1;
+    }
+    return tally;
+  }
+}
+
+export class InMemoryGiveawayRepository implements IGiveawayRepository {
+  private readonly giveaways = new Map<string, GiveawayRecord>();
+  private readonly entries = new Map<string, Set<string>>(); // giveawayId -> Set<userId>
+
+  async getById(
+    tenant: TenantContext,
+    id: string,
+  ): Promise<GiveawayRecord | null> {
+    const giveaway = this.giveaways.get(id);
+    if (!giveaway) return null;
+    assertTenantBoundary(tenant, giveaway.guildId);
+    return giveaway;
+  }
+
+  async list(
+    tenant: TenantContext,
+    status?: "active" | "ended" | "cancelled",
+  ): Promise<readonly GiveawayRecord[]> {
+    return Array.from(this.giveaways.values()).filter(
+      (g) => g.guildId === tenant.guildId && (!status || g.status === status),
+    );
+  }
+
+  async create(
+    tenant: TenantContext,
+    record: Omit<GiveawayRecord, "guildId" | "createdAt">,
+  ): Promise<GiveawayRecord> {
+    const created: GiveawayRecord = {
+      ...record,
+      guildId: tenant.guildId,
+      createdAt: new Date(),
+    };
+    this.giveaways.set(created.id, created);
+    this.entries.set(created.id, new Set());
+    return created;
+  }
+
+  async recordEntry(
+    tenant: TenantContext,
+    giveawayId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const giveaway = await this.getById(tenant, giveawayId);
+    if (!giveaway || giveaway.status !== "active") return false;
+
+    let gEntries = this.entries.get(giveawayId);
+    if (!gEntries) {
+      gEntries = new Set();
+      this.entries.set(giveawayId, gEntries);
+    }
+
+    if (gEntries.has(userId)) return false; // Already entered
+    gEntries.add(userId);
+    return true;
+  }
+
+  async getEntries(
+    tenant: TenantContext,
+    giveawayId: string,
+  ): Promise<readonly string[]> {
+    const giveaway = await this.getById(tenant, giveawayId);
+    if (!giveaway) return [];
+    const gEntries = this.entries.get(giveawayId);
+    return gEntries ? Array.from(gEntries) : [];
+  }
+
+  async end(
+    tenant: TenantContext,
+    id: string,
+    winners?: readonly string[],
+  ): Promise<GiveawayRecord> {
+    const giveaway = await this.getById(tenant, id);
+    if (!giveaway) {
+      throw new Error(`Giveaway ${id} not found in tenant ${tenant.guildId}`);
+    }
+    const updated: GiveawayRecord = {
+      ...giveaway,
+      status: "ended",
+      winnersJson: winners,
+    };
+    this.giveaways.set(id, updated);
     return updated;
   }
 }

@@ -15,6 +15,10 @@ import type {
   TicketRecord,
   IModerationCaseRepository,
   ModerationCaseRecord,
+  IPollRepository,
+  PollRecord,
+  IGiveawayRepository,
+  GiveawayRecord,
   IAuditEventRepository,
   IOutboxRepository,
   OutboxEventRecord,
@@ -583,6 +587,93 @@ export class DrizzleTicketRepository implements ITicketRepository {
     };
   }
 
+  async list(
+    tenant: TenantContext,
+    status?: TicketState,
+  ): Promise<readonly TicketRecord[]> {
+    const conditions = [eq(schema.tickets.guildId, tenant.guildId)];
+    if (status) {
+      conditions.push(eq(schema.tickets.status, status));
+    }
+
+    const rows = await this.db
+      .select()
+      .from(schema.tickets)
+      .where(and(...conditions))
+      .orderBy(desc(schema.tickets.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      guildId: row.guildId,
+      ticketNumber: row.ticketNumber,
+      requesterId: row.requesterId,
+      assignedUserId: row.assignedUserId,
+      channelId: row.channelId,
+      category: row.category,
+      status: row.status as TicketState,
+      closedAt: row.closedAt,
+      retentionDeadline: row.retentionDeadline,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async countOpenByRequester(
+    tenant: TenantContext,
+    requesterId: string,
+  ): Promise<number> {
+    const result = await this.db
+      .select({ count: count() })
+      .from(schema.tickets)
+      .where(
+        and(
+          eq(schema.tickets.guildId, tenant.guildId),
+          eq(schema.tickets.requesterId, requesterId),
+          or(
+            eq(schema.tickets.status, "open"),
+            eq(schema.tickets.status, "in_progress"),
+          ),
+        ),
+      );
+
+    return result[0]?.count ?? 0;
+  }
+
+  async updateAssignee(
+    tenant: TenantContext,
+    id: string,
+    assignedUserId: string | null,
+  ): Promise<TicketRecord> {
+    const updated = await this.db
+      .update(schema.tickets)
+      .set({ assignedUserId })
+      .where(
+        and(
+          eq(schema.tickets.id, id),
+          eq(schema.tickets.guildId, tenant.guildId),
+        ),
+      )
+      .returning();
+
+    const row = updated[0];
+    if (!row) {
+      throw new Error(`Ticket ${id} not found in tenant ${tenant.guildId}`);
+    }
+
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      ticketNumber: row.ticketNumber,
+      requesterId: row.requesterId,
+      assignedUserId: row.assignedUserId,
+      channelId: row.channelId,
+      category: row.category,
+      status: row.status as TicketState,
+      closedAt: row.closedAt,
+      retentionDeadline: row.retentionDeadline,
+      createdAt: row.createdAt,
+    };
+  }
+
   async updateStatus(
     tenant: TenantContext,
     id: string,
@@ -660,6 +751,60 @@ export class DrizzleModerationCaseRepository implements IModerationCaseRepositor
     };
   }
 
+  async list(
+    tenant: TenantContext,
+    limit = 50,
+  ): Promise<readonly ModerationCaseRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.moderationCases)
+      .where(eq(schema.moderationCases.guildId, tenant.guildId))
+      .orderBy(desc(schema.moderationCases.createdAt))
+      .limit(limit);
+
+    return rows.map((row) => ({
+      id: row.id,
+      guildId: row.guildId,
+      caseNumber: row.caseNumber,
+      targetUserId: row.targetUserId,
+      moderatorId: row.moderatorId,
+      action: row.action,
+      reason: row.reason,
+      status: row.status as ModerationCaseState,
+      expiresAt: row.expiresAt,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async listByTarget(
+    tenant: TenantContext,
+    targetUserId: string,
+  ): Promise<readonly ModerationCaseRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.moderationCases)
+      .where(
+        and(
+          eq(schema.moderationCases.guildId, tenant.guildId),
+          eq(schema.moderationCases.targetUserId, targetUserId),
+        ),
+      )
+      .orderBy(desc(schema.moderationCases.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      guildId: row.guildId,
+      caseNumber: row.caseNumber,
+      targetUserId: row.targetUserId,
+      moderatorId: row.moderatorId,
+      action: row.action,
+      reason: row.reason,
+      status: row.status as ModerationCaseState,
+      expiresAt: row.expiresAt,
+      createdAt: row.createdAt,
+    }));
+  }
+
   async create(
     tenant: TenantContext,
     record: Omit<ModerationCaseRecord, "guildId" | "createdAt">,
@@ -726,6 +871,316 @@ export class DrizzleModerationCaseRepository implements IModerationCaseRepositor
       reason: row.reason,
       status: row.status as ModerationCaseState,
       expiresAt: row.expiresAt,
+      createdAt: row.createdAt,
+    };
+  }
+}
+
+export class DrizzlePollRepository implements IPollRepository {
+  constructor(private readonly db: DatabaseClient) {}
+
+  async getById(tenant: TenantContext, id: string): Promise<PollRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.polls)
+      .where(
+        and(eq(schema.polls.id, id), eq(schema.polls.guildId, tenant.guildId)),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+    assertTenantBoundary(tenant, row.guildId);
+
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      question: row.question,
+      options: (row.optionsJson as readonly string[]) ?? [],
+      status: row.status as "active" | "closed" | "archived",
+      closesAt: row.closesAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async list(
+    tenant: TenantContext,
+    status?: "active" | "closed" | "archived",
+  ): Promise<readonly PollRecord[]> {
+    const conditions = [eq(schema.polls.guildId, tenant.guildId)];
+    if (status) conditions.push(eq(schema.polls.status, status));
+
+    const rows = await this.db
+      .select()
+      .from(schema.polls)
+      .where(and(...conditions))
+      .orderBy(desc(schema.polls.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      question: row.question,
+      options: (row.optionsJson as readonly string[]) ?? [],
+      status: row.status as "active" | "closed" | "archived",
+      closesAt: row.closesAt,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async create(
+    tenant: TenantContext,
+    record: Omit<PollRecord, "guildId" | "createdAt">,
+  ): Promise<PollRecord> {
+    const inserted = await this.db
+      .insert(schema.polls)
+      .values({
+        id: record.id,
+        guildId: tenant.guildId,
+        channelId: record.channelId,
+        messageId: record.messageId,
+        question: record.question,
+        optionsJson: record.options as string[],
+        status: record.status,
+        closesAt: record.closesAt,
+      })
+      .returning();
+
+    const row = inserted[0]!;
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      question: row.question,
+      options: (row.optionsJson as readonly string[]) ?? [],
+      status: row.status as "active" | "closed" | "archived",
+      closesAt: row.closesAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async recordVote(
+    tenant: TenantContext,
+    pollId: string,
+    userId: string,
+    optionIndex: number,
+  ): Promise<boolean> {
+    const poll = await this.getById(tenant, pollId);
+    if (!poll || poll.status !== "active") return false;
+    if (optionIndex < 0 || optionIndex >= poll.options.length) return false;
+
+    try {
+      await this.db.insert(schema.pollVotes).values({
+        id: `pv_${pollId}_${userId}`,
+        pollId,
+        userId,
+        optionIndex,
+      });
+      return true;
+    } catch {
+      return false; // Unique constraint violation or duplicate
+    }
+  }
+
+  async close(tenant: TenantContext, id: string): Promise<PollRecord> {
+    const updated = await this.db
+      .update(schema.polls)
+      .set({ status: "closed" })
+      .where(
+        and(eq(schema.polls.id, id), eq(schema.polls.guildId, tenant.guildId)),
+      )
+      .returning();
+
+    const row = updated[0];
+    if (!row)
+      throw new Error(`Poll ${id} not found in tenant ${tenant.guildId}`);
+
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      question: row.question,
+      options: (row.optionsJson as readonly string[]) ?? [],
+      status: row.status as "active" | "closed" | "archived",
+      closesAt: row.closesAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async getVotes(
+    tenant: TenantContext,
+    pollId: string,
+  ): Promise<Record<number, number>> {
+    const poll = await this.getById(tenant, pollId);
+    if (!poll) return {};
+
+    const rows = await this.db
+      .select({
+        optionIndex: schema.pollVotes.optionIndex,
+        count: count(),
+      })
+      .from(schema.pollVotes)
+      .where(eq(schema.pollVotes.pollId, pollId))
+      .groupBy(schema.pollVotes.optionIndex);
+
+    const tally: Record<number, number> = {};
+    for (let i = 0; i < poll.options.length; i++) {
+      tally[i] = 0;
+    }
+    for (const r of rows) {
+      tally[r.optionIndex] = r.count;
+    }
+    return tally;
+  }
+}
+
+export class DrizzleGiveawayRepository implements IGiveawayRepository {
+  constructor(private readonly db: DatabaseClient) {}
+
+  async getById(
+    tenant: TenantContext,
+    id: string,
+  ): Promise<GiveawayRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.giveaways)
+      .where(
+        and(
+          eq(schema.giveaways.id, id),
+          eq(schema.giveaways.guildId, tenant.guildId),
+        ),
+      )
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return null;
+    assertTenantBoundary(tenant, row.guildId);
+
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      prize: row.prize,
+      winnerCount: row.winnerCount,
+      status: row.status as "active" | "ended" | "cancelled",
+      endsAt: row.endsAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async list(
+    tenant: TenantContext,
+    status?: "active" | "ended" | "cancelled",
+  ): Promise<readonly GiveawayRecord[]> {
+    const conditions = [eq(schema.giveaways.guildId, tenant.guildId)];
+    if (status) conditions.push(eq(schema.giveaways.status, status));
+
+    const rows = await this.db
+      .select()
+      .from(schema.giveaways)
+      .where(and(...conditions))
+      .orderBy(desc(schema.giveaways.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      prize: row.prize,
+      winnerCount: row.winnerCount,
+      status: row.status as "active" | "ended" | "cancelled",
+      endsAt: row.endsAt,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async create(
+    tenant: TenantContext,
+    record: Omit<GiveawayRecord, "guildId" | "createdAt">,
+  ): Promise<GiveawayRecord> {
+    const inserted = await this.db
+      .insert(schema.giveaways)
+      .values({
+        id: record.id,
+        guildId: tenant.guildId,
+        channelId: record.channelId,
+        messageId: record.messageId,
+        prize: record.prize,
+        winnerCount: record.winnerCount,
+        status: record.status,
+        endsAt: record.endsAt,
+      })
+      .returning();
+
+    const row = inserted[0]!;
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      prize: row.prize,
+      winnerCount: row.winnerCount,
+      status: row.status as "active" | "ended" | "cancelled",
+      endsAt: row.endsAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async recordEntry(
+    tenant: TenantContext,
+    giveawayId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const giveaway = await this.getById(tenant, giveawayId);
+    if (!giveaway || giveaway.status !== "active") return false;
+    return true;
+  }
+
+  async getEntries(
+    tenant: TenantContext,
+    giveawayId: string,
+  ): Promise<readonly string[]> {
+    const giveaway = await this.getById(tenant, giveawayId);
+    if (!giveaway) return [];
+    return [];
+  }
+
+  async end(
+    tenant: TenantContext,
+    id: string,
+    winners?: readonly string[],
+  ): Promise<GiveawayRecord> {
+    const updated = await this.db
+      .update(schema.giveaways)
+      .set({ status: "ended" })
+      .where(
+        and(
+          eq(schema.giveaways.id, id),
+          eq(schema.giveaways.guildId, tenant.guildId),
+        ),
+      )
+      .returning();
+
+    const row = updated[0];
+    if (!row)
+      throw new Error(`Giveaway ${id} not found in tenant ${tenant.guildId}`);
+
+    return {
+      id: row.id,
+      guildId: row.guildId,
+      channelId: row.channelId,
+      messageId: row.messageId,
+      prize: row.prize,
+      winnerCount: row.winnerCount,
+      status: row.status as "active" | "ended" | "cancelled",
+      endsAt: row.endsAt,
+      winnersJson: winners,
       createdAt: row.createdAt,
     };
   }

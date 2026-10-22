@@ -5,6 +5,8 @@ import type {
   ITournamentRepository,
   ITicketRepository,
   IModerationCaseRepository,
+  IPollRepository,
+  IGiveawayRepository,
   IAuditEventRepository,
   IOutboxRepository,
 } from "../repositories/interfaces.js";
@@ -16,6 +18,8 @@ import {
   DrizzleTournamentRepository,
   DrizzleTicketRepository,
   DrizzleModerationCaseRepository,
+  DrizzlePollRepository,
+  DrizzleGiveawayRepository,
   DrizzleAuditEventRepository,
   DrizzleOutboxRepository,
 } from "../repositories/drizzle.js";
@@ -26,6 +30,8 @@ import {
   InMemoryTournamentRepository,
   InMemoryTicketRepository,
   InMemoryModerationCaseRepository,
+  InMemoryPollRepository,
+  InMemoryGiveawayRepository,
   InMemoryAuditEventRepository,
   InMemoryOutboxRepository,
 } from "../repositories/in-memory.js";
@@ -37,6 +43,8 @@ export interface Repositories {
   readonly tournaments: ITournamentRepository;
   readonly tickets: ITicketRepository;
   readonly moderationCases: IModerationCaseRepository;
+  readonly polls: IPollRepository;
+  readonly giveaways: IGiveawayRepository;
   readonly auditEvents: IAuditEventRepository;
   readonly outbox: IOutboxRepository;
 }
@@ -57,6 +65,8 @@ export class DrizzleUnitOfWork implements IUnitOfWork {
       tournaments: new DrizzleTournamentRepository(db),
       tickets: new DrizzleTicketRepository(db),
       moderationCases: new DrizzleModerationCaseRepository(db),
+      polls: new DrizzlePollRepository(db),
+      giveaways: new DrizzleGiveawayRepository(db),
       auditEvents: new DrizzleAuditEventRepository(db),
       outbox: new DrizzleOutboxRepository(db),
     };
@@ -88,6 +98,10 @@ export class DrizzleUnitOfWork implements IUnitOfWork {
         moderationCases: new DrizzleModerationCaseRepository(
           tx as unknown as DatabaseClient,
         ),
+        polls: new DrizzlePollRepository(tx as unknown as DatabaseClient),
+        giveaways: new DrizzleGiveawayRepository(
+          tx as unknown as DatabaseClient,
+        ),
         auditEvents: new DrizzleAuditEventRepository(
           tx as unknown as DatabaseClient,
         ),
@@ -110,6 +124,8 @@ export class InMemoryUnitOfWork implements IUnitOfWork {
       tournaments: new InMemoryTournamentRepository(),
       tickets: new InMemoryTicketRepository(),
       moderationCases: new InMemoryModerationCaseRepository(),
+      polls: new InMemoryPollRepository(),
+      giveaways: new InMemoryGiveawayRepository(),
       auditEvents: new InMemoryAuditEventRepository(),
       outbox: new InMemoryOutboxRepository(),
     };

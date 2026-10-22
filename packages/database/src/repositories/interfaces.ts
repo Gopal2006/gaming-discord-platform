@@ -94,6 +94,31 @@ export interface ModerationCaseRecord {
   readonly createdAt: Date;
 }
 
+export interface PollRecord {
+  readonly id: string;
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string | null;
+  readonly question: string;
+  readonly options: readonly string[];
+  readonly status: "active" | "closed" | "archived";
+  readonly closesAt: Date | null;
+  readonly createdAt: Date;
+}
+
+export interface GiveawayRecord {
+  readonly id: string;
+  readonly guildId: string;
+  readonly channelId: string;
+  readonly messageId: string | null;
+  readonly prize: string;
+  readonly winnerCount: number;
+  readonly status: "active" | "ended" | "cancelled";
+  readonly endsAt: Date;
+  readonly winnersJson?: readonly string[];
+  readonly createdAt: Date;
+}
+
 export interface OutboxEventRecord {
   readonly id: string;
   readonly guildId: string | null;
@@ -177,6 +202,14 @@ export interface ITournamentRepository {
 
 export interface ITicketRepository {
   getById(tenant: TenantContext, id: string): Promise<TicketRecord | null>;
+  list(
+    tenant: TenantContext,
+    status?: TicketState,
+  ): Promise<readonly TicketRecord[]>;
+  countOpenByRequester(
+    tenant: TenantContext,
+    requesterId: string,
+  ): Promise<number>;
   create(
     tenant: TenantContext,
     record: Omit<TicketRecord, "guildId" | "createdAt">,
@@ -187,6 +220,11 @@ export interface ITicketRepository {
     status: TicketState,
     extra?: { closedAt?: Date; retentionDeadline?: Date },
   ): Promise<TicketRecord>;
+  updateAssignee(
+    tenant: TenantContext,
+    id: string,
+    assignedUserId: string | null,
+  ): Promise<TicketRecord>;
 }
 
 export interface IModerationCaseRepository {
@@ -194,6 +232,14 @@ export interface IModerationCaseRepository {
     tenant: TenantContext,
     id: string,
   ): Promise<ModerationCaseRecord | null>;
+  list(
+    tenant: TenantContext,
+    limit?: number,
+  ): Promise<readonly ModerationCaseRecord[]>;
+  listByTarget(
+    tenant: TenantContext,
+    targetUserId: string,
+  ): Promise<readonly ModerationCaseRecord[]>;
   create(
     tenant: TenantContext,
     record: Omit<ModerationCaseRecord, "guildId" | "createdAt">,
@@ -203,6 +249,55 @@ export interface IModerationCaseRepository {
     id: string,
     status: ModerationCaseState,
   ): Promise<ModerationCaseRecord>;
+}
+
+export interface IPollRepository {
+  getById(tenant: TenantContext, id: string): Promise<PollRecord | null>;
+  list(
+    tenant: TenantContext,
+    status?: "active" | "closed" | "archived",
+  ): Promise<readonly PollRecord[]>;
+  create(
+    tenant: TenantContext,
+    record: Omit<PollRecord, "guildId" | "createdAt">,
+  ): Promise<PollRecord>;
+  recordVote(
+    tenant: TenantContext,
+    pollId: string,
+    userId: string,
+    optionIndex: number,
+  ): Promise<boolean>;
+  close(tenant: TenantContext, id: string): Promise<PollRecord>;
+  getVotes(
+    tenant: TenantContext,
+    pollId: string,
+  ): Promise<Record<number, number>>;
+}
+
+export interface IGiveawayRepository {
+  getById(tenant: TenantContext, id: string): Promise<GiveawayRecord | null>;
+  list(
+    tenant: TenantContext,
+    status?: "active" | "ended" | "cancelled",
+  ): Promise<readonly GiveawayRecord[]>;
+  create(
+    tenant: TenantContext,
+    record: Omit<GiveawayRecord, "guildId" | "createdAt">,
+  ): Promise<GiveawayRecord>;
+  recordEntry(
+    tenant: TenantContext,
+    giveawayId: string,
+    userId: string,
+  ): Promise<boolean>;
+  getEntries(
+    tenant: TenantContext,
+    giveawayId: string,
+  ): Promise<readonly string[]>;
+  end(
+    tenant: TenantContext,
+    id: string,
+    winners?: readonly string[],
+  ): Promise<GiveawayRecord>;
 }
 
 export interface IAuditEventRepository {
