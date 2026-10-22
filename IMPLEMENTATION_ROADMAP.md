@@ -47,21 +47,27 @@
 - Transaction and tenant-scope integration tests pass.
 - Outbox/job recovery logic is tested for publish interruption and replay.
 
-## Milestone 3 — Authentication, tenant isolation and authorization
+## Milestone 3 — Authentication, tenant isolation, authorization, and action-safety boundary
 
-**Work**
+**Work Completed**
 
-- Implement Discord OAuth2 flow and secure server-side session lifecycle.
+- Implement Discord OAuth2 flow and secure server-side session lifecycle with SHA-256 session token hashing.
 - Build server picker from authorized/manageable guilds and verified install state.
 - Implement platform realm and guild realm as separate capability namespaces.
 - Add grant/revoke/effective-access evaluation, audit, session revocation and cache invalidation.
-- Implement API schema validation/response serialization, CSRF/CORS/headers/rate limits.
+- Implement API schema validation/response serialization, strict CORS allowlist, cookie CSRF protection, security headers and rate limits.
+- **Action-Safety Policy Engine:** Central, transport-independent evaluation gate (`@nexus/authorization`) enforcing actor grants, Discord permission requirements, role hierarchy, bulk limits, mass mention suppression, and single-use confirmation tokens.
+- **Administrator Support Model:** Safe handling of Discord `ADMINISTRATOR` permission (`0x8`) as an external transport capability that NEVER bypasses internal authorization, hierarchy, or safety ceilings.
+- **Emergency Controls:** Per-guild and global emergency kill-switches halting mutations and pausing outbox dispatchers.
+- **Destructive Operation Safeguards:** Cryptographic single-use confirmation tokens with 60s TTL and replay prevention.
 
-**Exit criteria**
+**Exit criteria (Verified)**
 
 - Cross-tenant negative tests pass for all existing endpoints/repositories.
-- A normal guild admin cannot access platform routes.
-- Permission revocation takes effect within defined freshness bound.
+- A normal guild admin cannot access platform routes (403 `REALM_MISMATCH`).
+- Internal action policies reject unauthorized actions even when Discord grants `ADMINISTRATOR`.
+- Emergency shutdown halts new actions and pauses worker event dispatch.
+- Replayed, mismatched, or expired confirmation tokens are rejected.
 - No sensitive tokens reach browser storage/logs.
 
 ## Milestone 4 — Bot installation, setup and diagnostics
@@ -69,6 +75,8 @@
 **Work**
 
 - Implement Discord Gateway runtime, slash command registry, interaction acknowledgement helper and REST adapter.
+- **Integration Contract:** All Discord slash commands and interaction handlers must route mutations through the central `ActionPolicyEngine` and application workflows.
+- Support both **Full Administrator Mode** (`0x8`) and **Restricted Granular Mode** during guild installation.
 - Build bot install/permission explanation, guild onboarding, config persistence, module registry and diagnostics.
 - Implement audit log channel/config setup as safe reconciliation, not blind duplication.
 - Add structured logging, graceful shutdown, connection health and staging-guild test workflow.
@@ -76,7 +84,8 @@
 **Exit criteria**
 
 - Setup is idempotent and repairs missing channels/settings safely.
-- Missing permission/role-hierarchy cases explain exact remediation.
+- Missing permission/role-hierarchy cases explain exact remediation based on the verified manifest.
+- Bot mutations fail closed if Discord permissions or internal action policies are not satisfied.
 - Bot can restart without duplicate setup artifacts or lost critical state.
 
 ## Milestone 5 — Base server dashboard and design system
