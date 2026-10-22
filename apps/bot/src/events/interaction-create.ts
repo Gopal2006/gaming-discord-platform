@@ -83,6 +83,19 @@ export async function onInteractionCreate(
     const subcommandGroup =
       interaction.options.getSubcommandGroup(false) ?? undefined;
 
+    const options: Record<string, unknown> = {};
+    const extractOptions = (data: readonly any[]) => {
+      for (const item of data) {
+        if (item.value !== undefined) {
+          options[item.name] = item.value;
+        }
+        if (item.options && Array.isArray(item.options)) {
+          extractOptions(item.options);
+        }
+      }
+    };
+    extractOptions(interaction.options.data);
+
     // 6. Dispatch via CommandRouter
     const result = await router.dispatch(interaction.commandName, {
       guildId,
@@ -95,7 +108,7 @@ export async function onInteractionCreate(
       correlationId,
       uow,
       discordClient,
-      options: {},
+      options,
       subcommand,
       subcommandGroup,
     });

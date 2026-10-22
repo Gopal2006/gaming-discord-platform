@@ -7,6 +7,11 @@ import { SetupCommand } from "./commands/setup.js";
 import { HelpCommand } from "./commands/help.js";
 import { StatusCommand } from "./commands/status.js";
 import { ConfigCommand } from "./commands/config.js";
+import { ModerationCommand } from "./commands/moderation.js";
+import { TicketCommand } from "./commands/ticket.js";
+import { PollCommand } from "./commands/poll.js";
+import { GiveawayCommand } from "./commands/giveaway.js";
+import { AnnouncementCommand } from "./commands/announcement.js";
 import { onGuildCreate } from "./events/guild-create.js";
 import { onGuildDelete } from "./events/guild-delete.js";
 import { onInteractionCreate } from "./events/interaction-create.js";
@@ -34,6 +39,11 @@ export function createNexusBot(options: BotOptions): NexusBot {
   router.register(new HelpCommand());
   router.register(new StatusCommand());
   router.register(new ConfigCommand());
+  router.register(new ModerationCommand());
+  router.register(new TicketCommand());
+  router.register(new PollCommand());
+  router.register(new GiveawayCommand());
+  router.register(new AnnouncementCommand());
 
   // Instantiate Discord.js Client with minimum intents (P0 requires only Guilds intent)
   const client = new Client({
