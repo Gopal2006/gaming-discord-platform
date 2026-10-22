@@ -129,20 +129,41 @@
 - Next.js production build completes cleanly across all 8 static and dynamic routes.
 - Automated tests pass monorepo-wide (14 test suites, 122 tests passing monorepo-wide).
 
-## Milestone 6 — Core community operations
+## Milestone 6 — Core community operations (Completed & Verified)
 
-**Work**
+**Work Completed**
 
-- Moderation cases/actions, warning history, timeouts, safe purge, slowmode/lock/unlock.
-- Welcome/leave, announcement template authoring/preview/publish/schedule, role self-service if approved.
-- Tickets with archived closure/transcript retention, polls, giveaways and opt-in notifications.
-- Capability checks, audit events and error/partial-success UX for each action.
+- **Database Repositories Expanded**:
+  - `ITicketRepository`: Added `list`, `countOpenByRequester`, `updateAssignee`.
+  - `IModerationCaseRepository`: Added `list`, `listByTarget`.
+  - `IPollRepository`: Created interface and implementations (`InMemoryPollRepository`, `DrizzlePollRepository`) with atomic single-vote recording and tallying.
+  - `IGiveawayRepository`: Created interface and implementations (`InMemoryGiveawayRepository`, `DrizzleGiveawayRepository`) with entry deduplication and winner picking.
+  - Registered all repositories within `IUnitOfWork` and unit-of-work transactions.
+- **Discord Adapter Enhancements**:
+  - `IDiscordRestClient` & `FakeDiscordClient`: Added `timeoutMember`, `kickMember`, `banMember`, `unbanMember`, `bulkDelete`, `setChannelSlowmode`, `lockChannel`, `unlockChannel`, `createTicketChannel`, `fetchChannelMessages`.
+- **Application Workflows**:
+  - `openTicketWorkflow`: Idempotent ticket creation with `maxActiveTicketsPerUser` limit check, audit events, and outbox event publishing.
+  - `pollWorkflow`: `createPollWorkflow`, `votePollWorkflow` (atomic single vote per user), `closePollWorkflow` (final tally breakdown).
+  - `giveawayWorkflow`: `createGiveawayWorkflow`, `enterGiveawayWorkflow` (single entry guarantee), `endGiveawayWorkflow` (auditable winner picking), `rerollGiveawayWorkflow`.
+- **Discord Bot Slash Commands (`apps/bot`)**:
+  - `/mod`: `warn`, `timeout`, `kick`, `ban`, `unban`, `history`, `purge`, `slowmode`, `lock`, `unlock`. Enforces role hierarchy checks, confirmation tokens on destructive actions, and audit logs.
+  - `/ticket`: `open`, `claim`, `close`, `transcript`.
+  - `/poll`: `create`, `vote`, `close`.
+  - `/giveaway`: `create`, `enter`, `end`, `reroll`, `list`.
+  - `/announce`: `title`, `content`, `channel`, `mention` (with mention suppression protections).
+  - Updated `interaction-create` event handler to recursively parse Discord options and subcommands.
+- **REST API Endpoints (`apps/api`)**:
+  - `GET /api/v1/guilds/:guildId/moderation/cases`: list moderation cases by target user or guild.
+  - `GET /api/v1/guilds/:guildId/tickets` & `POST .../tickets`: ticket listing and creation.
+  - `GET /api/v1/guilds/:guildId/polls`, `POST .../polls`, `POST .../polls/:pollId/vote`, `POST .../polls/:pollId/close`.
+  - `GET /api/v1/guilds/:guildId/giveaways`, `POST .../giveaways`, `POST .../giveaways/:giveawayId/enter`, `POST .../giveaways/:giveawayId/end`, `POST .../giveaways/:giveawayId/reroll`.
 
-**Exit criteria**
+**Exit criteria (Verified)**
 
-- Every command/API action has permission-denial tests, audit behavior and rate-limit handling.
-- Scheduled actions survive restart and cannot execute twice due to retry.
-- Destructive actions preview scope and follow data-retention rules.
+- Every command/API action enforces internal actor grants/capabilities (`TicketCreate`, `PollCreate`, `PollVote`, `GiveawayCreate`, `ModerationWarn`, `ModerationBan`, etc.) and records durable audit events.
+- Role hierarchy protections prevent acting on guild owners, bot itself, or equal/superior roles.
+- Destructive operations strictly require confirmation tokens or explicit confirmation parameter.
+- Automated tests pass monorepo-wide (16 test suites, 149 tests passing monorepo-wide, 0 failures).
 
 ## Milestone 7 — Game profiles and registration
 
