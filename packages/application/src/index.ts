@@ -7,3 +7,6 @@ export * from "./workflows/transition-ticket.js";
 export * from "./workflows/dispatch-outbox.js";
 export * from "./workflows/manage-emergency-stop.js";
 export * from "./workflows/execute-moderation.js";
+export * from "./workflows/open-ticket.js";
+export * from "./workflows/poll-workflow.js";
+export * from "./workflows/giveaway-workflow.js";
