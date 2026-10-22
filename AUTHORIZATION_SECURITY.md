@@ -128,33 +128,54 @@ Use the official Discord OAuth2 flow with state and PKCE where applicable, exact
 
 ### Bot and Discord-specific risks
 
-- Never request Administrator by default.
-- Keep Message Content and Presence intents disabled unless an approved feature requires them. Verify the current Discord Developer Portal configuration before release.
+#### Discord Permissions & Administrator Installation Model
+
+- **Product Policy Decision:** Nexus supports an Administrator-capable installation mode (`0x8`) to unlock its full automation capability (dynamic channel creation, bracket management, server locks, and deep moderation) without requiring manual per-channel permission overrides.
+- **Granular Restricted Mode:** Nexus simultaneously retains a restricted-permissions installation option for risk-sensitive communities, requiring only explicit granular bitsets (e.g. `BAN_MEMBERS`, `MANAGE_MESSAGES`, `MODERATE_MEMBERS`).
+- **Internal Action-Safety Boundary:** External Discord permissions (including `ADMINISTRATOR`) are treated strictly as transport capabilities, NEVER as internal authorization. The central `ActionPolicyEngine` enforces:
+  1. Internal actor grants / RBAC capabilities.
+  2. Role hierarchy (cannot ban guild owner, cannot ban bot self, cannot ban superior/equal role).
+  3. Per-guild and global emergency kill-switches.
+  4. Conservative bulk limits (e.g. max 100 purge).
+  5. Cryptographic single-use confirmation tokens for destructive actions.
+  6. Default mass mention suppression.
+- Keep Message Content and Presence intents disabled unless an approved feature requires them.
 - Permission changes, role hierarchy, channel existence and target validity can change after setup; check before action and offer diagnostics.
-- Do not treat a Discord DM as guaranteed delivery. Report failed/closed-DM status accurately.
-- Prevent mention abuse with allowlists and explicit mention parsing; no template can inject arbitrary mass mentions without capability and confirmation.
-- Use rate-aware bounded request queues. Do not loop to bypass rate limits.
-- Treat buttons/modals as untrusted commands: validate the actor, guild, object, nonce/version and valid state transition on every interaction.
+- Treat buttons/modals as untrusted commands: validate actor, guild, object, nonce/version and valid state transition on every interaction.
 
-## 9. Destructive operations and audit
+## 9. Destructive operations, bulk limits and confirmations
 
-Any action that can remove data, notify a large group, change permissions, lock many channels, force a tournament result or access private evidence must include:
+Any action that can remove data, notify a large group, change permissions, lock channels, or ban members must pass through the `ActionPolicyEngine`:
 
-- Explicit capability and scope check.
-- Impact preview (counts and targets) when practical.
-- Reason for high-impact security/admin actions.
-- Confirmation with timeout or explicit typed confirmation for very large/destructive operations.
-- Idempotency/replay protection.
-- Durable audit entry with actor, guild, action, resource, redacted parameters, reason, timestamp, request/correlation ID and outcome.
-- Recovery plan: undo, snapshot, export, retention delay, or documented irreversibility.
+- **Explicit capability and scope check:** The actor must possess an unexpired internal grant.
+- **Role Hierarchy Guard:** Refuses actions against the guild owner, the bot itself, or equal/superior role positions.
+- **Bulk Limits:** Hard configurable ceiling (default 100 messages for purge) prevents runaway or automated mass destruction.
+- **Impact preview & confirmation tokens:** Destructive operations require an impact preview and an ephemeral, single-use cryptographic confirmation token (`InMemoryConfirmationService`).
+  - Tokens are bound to the exact `guildId`, `actorId`, `operationType`, and target fingerprint.
+  - Expire in 60 seconds (configurable TTL).
+  - Strictly consumed on first use; replayed or mismatched tokens fail with `DENIED_CONFIRMATION_INVALID`.
+- **Mass Mention Suppression:** `@everyone` and `@here` are stripped or denied by default unless the action explicitly holds the `announcement.publish` capability and confirmation.
+- **Durable audit entry:** Recorded transactionally with correlation ID, actor, target, parameters, and outcome.
 
-Audit logs must be tamper-resistant within the application security model. Tenant admins may view allowed audit records but must not modify or silently purge them. Retention/deletion exceptions are controlled by documented policy.
+## 10. Incident response & emergency controls
 
-## 10. Incident response
+### Emergency Kill-Switches
 
-Maintain runbooks for: bot token leak, OAuth compromise, cross-tenant access, unauthorized role/permission changes, mass spam/raid, queue backlog, Discord outage/rate limiting, database corruption, bad migration, leaked participant evidence and compromised deploy credentials. Each runbook specifies severity, decision owner, containment, evidence preservation, communication, recovery validation, and postmortem steps.
+- **Per-Guild Emergency Stop:** Guild owners/administrators can execute `manageEmergencyStopWorkflow` (or `POST /api/v1/guilds/:guildId/emergency-stop`). Once active:
+  - All new state-changing bot operations in the guild fail closed with `DENIED_GUILD_EMERGENCY_STOP`.
+  - The outbox worker defers pending event publishing for that guild.
+  - Can be lifted only by authorized administrators through explicit emergency management operations.
+- **Global Emergency Stop:** Platform operators can pause bot operations across all tenants (`DENIED_GLOBAL_EMERGENCY_STOP`), halting worker dispatches immediately.
+- **Critical Boundary Note:** Application-level emergency stops halt Nexus software execution. They CANNOT prevent an external attacker who has stolen the raw Discord Bot Token from directly invoking the Discord REST API. Token compromise requires immediate revocation in the Discord Developer Portal.
 
-A kill switch may disable a specific module/action family or pause publication workers. It must not create an unsafe bypass or make account revocation impossible. Platform emergency controls are audited and scoped.
+### Bot Token Rotation Runbook
+
+1. **Detection & Triage:** Identify leaked token or suspicious API traffic.
+2. **Immediate Token Reset:** Navigate to the Discord Developer Portal -> Bot -> Click **Reset Token**. This immediately invalidates the compromised token with Discord's gateway.
+3. **Application Emergency Stop:** Enable the global emergency stop in Nexus configuration to pause dispatch loops and loggers.
+4. **Credential Update:** Update the secret manager / deployment environment with the newly generated bot token.
+5. **Worker Restart & Drain:** Restart bot instances and outbox dispatchers, verifying clean authentication with Discord Gateway v10.
+6. **Audit & Reconciliation:** Review `audit_events` and Discord Audit Log to identify any unauthorized mutations executed during the compromise window.
 
 ## 11. Privacy and retention
 
